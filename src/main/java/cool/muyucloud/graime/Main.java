@@ -1,8 +1,7 @@
 package cool.muyucloud.graime;
 
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public class Main {
     public static void main(String[] args) {

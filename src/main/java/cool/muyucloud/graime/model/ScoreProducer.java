@@ -5,7 +5,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.lang.reflect.Constructor;
 import java.nio.file.Path;
 import java.util.Collection;
@@ -18,7 +17,7 @@ public abstract class ScoreProducer {
     private static final Map<String, Class<? extends ScoreProducer>> REGISTRY = new HashMap<>();
 
     static {
-        register("default", TestScoreProducer.class);
+        register("default", StaticDictionModel.class);
     }
 
     /**
@@ -47,7 +46,7 @@ public abstract class ScoreProducer {
      * Generically find the model file from a path
      * and classify the type of the producer model then load.
      *
-     * @param path The File instance of the model file ready to load.
+     * @param path Path that might contain a model file.
      * @return The loaded producer model instance, {@code null} if identifier not found.
      */
     public static @Nullable ScoreProducer genericLoad(@NotNull Path path) {
@@ -69,7 +68,7 @@ public abstract class ScoreProducer {
      * @param file The File instance of the model file ready to load.
      * @return The loaded producer model instance, {@code null} if identifier not found.
      */
-    public static @Nullable ScoreProducer genericLoad(File file) {
+    public static @Nullable ScoreProducer genericLoad(@NotNull File file) {
         String name = file.getName();
         String identifier = name.substring(0, name.lastIndexOf('.'));
         Class<? extends ScoreProducer> cl = REGISTRY.get(identifier);
@@ -131,7 +130,7 @@ public abstract class ScoreProducer {
      *
      * @param path Path of the model file.
      */
-    public ScoreProducer(Path path) throws FileNotFoundException {
+    public ScoreProducer(Path path) {
         this.load(path);
     }
 
@@ -153,7 +152,7 @@ public abstract class ScoreProducer {
      *
      * @param path Path of the model file.
      */
-    public abstract void load(@NotNull Path path) throws FileNotFoundException;
+    public abstract void load(@NotNull Path path);
 
     /**
      * Save and dump the producer model into target path.
@@ -174,7 +173,7 @@ public abstract class ScoreProducer {
     /**
      * Update (or train) the producer model with the user's selection.
      *
-     * @param pinyin Pinyin input by the user.
+     * @param pinyin    Pinyin input by the user.
      * @param selection Candidate word that is selected by the user.
      */
     public abstract void update(@NotNull String pinyin, @NotNull String selection);
@@ -195,7 +194,7 @@ public abstract class ScoreProducer {
      * @param weight   Weight of another producer, in bound between 0 and 1.
      * @return Newly merged producer.
      */
-    public abstract @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer, float weight);
+    public abstract @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer, float weight) throws ClassCastException;
 
 
     /**
@@ -205,7 +204,7 @@ public abstract class ScoreProducer {
      * @param producer Another producer to be merged.
      * @return Newly merged producer.
      */
-    public abstract @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer);
+    public abstract @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer) throws ClassCastException;
 
 
     /**
@@ -216,7 +215,7 @@ public abstract class ScoreProducer {
      * @param producers Other producers to be merged.
      * @return Newly merged producer.
      */
-    public abstract @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer... producers);
+    public abstract @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer... producers) throws ClassCastException;
 
 
     /**
@@ -227,7 +226,27 @@ public abstract class ScoreProducer {
      * @param producers Other producers to be merged.
      * @return Newly merged producer.
      */
-    public abstract @NotNull ScoreProducer mergeWith(@NotNull Collection<ScoreProducer> producers);
+    public abstract @NotNull ScoreProducer mergeWith(@NotNull Collection<ScoreProducer> producers) throws ClassCastException;
+
+    /**
+     * Whether this producer model can merge with the producer provided,
+     * or the provided producer can merge with this producer model.
+     *
+     * @param producer Another producer to get merged.
+     * @return {@code true} if this producer and the producer provided can get merged.
+     */
+    public boolean canMergeWith(ScoreProducer producer) {
+        return this.canOneWayMergeWith(producer) || producer.canOneWayMergeWith(this);
+    }
+
+    /**
+     * Whether the current producer model can merge with the producer provided.<br/>
+     * Notice that this is only a one-way detect.
+     *
+     * @param producer Another producer to get merged.
+     * @return {@code true} if this producer and the producer provided can get merged.
+     */
+    protected abstract boolean canOneWayMergeWith(ScoreProducer producer);
 
     /**
      * Whether the instance has been changed and should be dumped.
@@ -235,11 +254,4 @@ public abstract class ScoreProducer {
      * @return {@code true} if the instance should be dumped.
      */
     public abstract boolean isDirty();
-
-    /**
-     * To provide access for merging.
-     *
-     * @return Mappings for {@code Map[String: pinyin, Map[String: candidate, Float: score]]}.
-     * */
-    protected abstract Map<String, Map<String, Float>> getMap();
 }

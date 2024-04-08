@@ -1,6 +1,6 @@
 package cool.muyucloud.graime;
 
-import cool.muyucloud.graime.struct.SceneTree;
+import cool.muyucloud.graime.util.SceneTree;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
 

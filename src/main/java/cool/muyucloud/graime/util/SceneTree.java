@@ -1,5 +1,6 @@
-package cool.muyucloud.graime.struct;
+package cool.muyucloud.graime.util;
 
+import com.sun.jdi.InternalException;
 import cool.muyucloud.graime.model.ScoreProducer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -10,7 +11,6 @@ import java.util.*;
 
 public class SceneTree {
     private final @NotNull Path parent;
-    private final @NotNull Path name;
     private @NotNull Node root;
     private final @NotNull Map<Path, Node> nodes = new HashMap<>();
     private @NotNull Node current;
@@ -27,8 +27,7 @@ public class SceneTree {
             throw new RuntimeException("Root path %s not found".formatted(path));
         }
         this.parent = path.toAbsolutePath().getParent();
-        this.name = path.getFileName();
-        this.root = traverseLoad(this.name);
+        this.root = traverseLoad(path.getFileName());
         this.current = this.root;
         if (!this.root.hasProducer()) {
             ScoreProducer producer = ScoreProducer.create("default");
@@ -37,7 +36,7 @@ public class SceneTree {
     }
 
     public @NotNull Path getName() {
-        return this.name;
+        return this.root.getPath();
     }
 
     /**
@@ -99,8 +98,14 @@ public class SceneTree {
      * @param selection Candidate word that is selected by the user.
      */
     public void updateProducer(String pinyin, String selection) {
-        assert this.current.getProducer() != null;
-        assert this.root.getProducer() != null;
+        ScoreProducer current = this.current.getProducer();
+        ScoreProducer root = this.root.getProducer();
+        if (current == null) {
+            throw new IllegalStateException("Current scene cannot be input.");
+        }
+        if (root == null) {
+            throw new InternalException("Model of root node is missing, might caused by an internal structure error.");
+        }
         this.current.getProducer().update(pinyin, selection);
         this.root.getProducer().update(pinyin, selection);
     }
@@ -110,7 +115,7 @@ public class SceneTree {
      */
     public void load() {
         this.nodes.clear();
-        this.root = traverseLoad(this.parent.resolve(this.name));
+        this.root = traverseLoad(this.parent.resolve(this.getName()));
     }
 
     /**
@@ -145,7 +150,7 @@ public class SceneTree {
     }
 
     private Node add(Path path) {
-        if (!path.getName(0).equals(this.name)) {
+        if (!path.getName(0).equals(this.getName())) {
             throw new IllegalArgumentException("Relative path does not belong to this SceneTree");
         }
         Node former = this.root, node = null;
@@ -169,14 +174,12 @@ public class SceneTree {
 
     private Path calcRelative(Path program, Path box) {
         program = Path.of(String.valueOf(program.hashCode()));
-        return this.name.resolve(program).resolve(box);
+        return this.getName().resolve(program).resolve(box);
     }
 
     private Node traverseLoad(@NotNull Path path) {
         Path absolute = this.parent.resolve(path);
-        ScoreProducer producer = ScoreProducer.genericLoad(absolute);
-        Node node = new Node(path);
-        node.setProducer(producer);
+        Node node = Node.load(path, this.parent);
         for (File subFile : Objects.requireNonNull(absolute.toFile().listFiles())) {
             if (subFile.isDirectory()) {
                 Path subFileName = subFile.toPath().getFileName();
@@ -202,6 +205,18 @@ public class SceneTree {
          */
         public Node(Path path) {
             this.path = path;
+        }
+
+        /**
+         * Create a node that is new, which involves dirty-marking.
+         *
+         * @param path Relative path of a scene node.
+         */
+        public static Node load(Path path, Path root) {
+            Node node = new Node(path);
+            ScoreProducer producer = ScoreProducer.genericLoad(root.resolve(path));
+            node.setProducer(producer);
+            return node;
         }
 
         /**

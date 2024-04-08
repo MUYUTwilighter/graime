@@ -10,7 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @TestOnly
-public class TestScoreProducer extends ScoreProducer {
+public class StaticDictionModel extends ScoreProducer implements LexiconObtainable {
     private final Map<String, Map<String, Float>> map = new HashMap<>();
     private boolean dirty = false;
 
@@ -25,7 +25,7 @@ public class TestScoreProducer extends ScoreProducer {
     }
 
     @Override
-    public void load(@NotNull Path path) throws FileNotFoundException {
+    public void load(@NotNull Path path) {
         try (InputStream stream = new FileInputStream(path.toFile())) {
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -66,8 +66,8 @@ public class TestScoreProducer extends ScoreProducer {
 
     @Override
     public @NotNull ScoreProducer copy() {
-        TestScoreProducer that = new TestScoreProducer();
-        that.dirty = true;
+        StaticDictionModel copied = new StaticDictionModel();
+        copied.dirty = true;
         for (Map.Entry<String, Map<String, Float>> entry : this.map.entrySet()) {
             String pinyin = entry.getKey();
             Map<String, Float> candidates = entry.getValue();
@@ -77,16 +77,50 @@ public class TestScoreProducer extends ScoreProducer {
                 float score = stringFloatEntry.getValue();
                 thatCandidates.put(candidate, score);
             }
-            that.map.put(pinyin, thatCandidates);
+            copied.map.put(pinyin, thatCandidates);
         }
-        return that;
+        return copied;
     }
 
     @Override
-    public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer, float weight) {
-        ScoreProducer mergedProducer = this.copy();
-        Map<String, Map<String, Float>> merged = mergedProducer.getMap();
-        for (Map.Entry<String, Map<String, Float>> entry : producer.getMap().entrySet()) {
+    public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer) throws ClassCastException {
+        return this.mergeWith(producer, 0.5F);
+    }
+
+    @Override
+    public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer... producers) throws ClassCastException {
+        ScoreProducer merged = this.copy();
+        for (int i = 0; i < producers.length; ++i) {
+            ScoreProducer producer = producers[i];
+            merged.mergeWith(producer, 1F / (i + 1));
+        }
+        return merged;
+    }
+
+    @Override
+    public @NotNull ScoreProducer mergeWith(@NotNull Collection<ScoreProducer> producers) throws ClassCastException {
+        ScoreProducer merged = this.copy();
+        int i = 0;
+        for (ScoreProducer producer : producers) {
+            merged.mergeWith(producer, 1F / (i + 1));
+            ++i;
+        }
+        return merged;
+    }
+
+    @Override
+    public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer, float weight) throws ClassCastException {
+        if (this.canOneWayMergeWith(producer)) {
+            return this.mergeWithLexicon((LexiconObtainable) producer, weight);
+        } else {
+            return producer.mergeWith(this);
+        }
+    }
+
+    private @NotNull StaticDictionModel mergeWithLexicon(@NotNull LexiconObtainable producer, float weight) throws ClassCastException {
+        StaticDictionModel mergedProducer = (StaticDictionModel) this.copy();
+        Map<String, Map<String, Float>> merged = mergedProducer.getLexicon();
+        for (Map.Entry<String, Map<String, Float>> entry : producer.getLexicon().entrySet()) {
             String pinyin = entry.getKey();
             Map<String, Float> candidates = entry.getValue();
             Map<String, Float> mergedCandidates = merged.getOrDefault(pinyin, new HashMap<>());
@@ -107,38 +141,17 @@ public class TestScoreProducer extends ScoreProducer {
     }
 
     @Override
-    public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer) {
-        return this.mergeWith(producer, 0.5F);
-    }
-
-    @Override
-    public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer... producers) {
-        ScoreProducer merged = this.copy();
-        for (int i = 0; i < producers.length; ++i) {
-            ScoreProducer producer = producers[i];
-            merged.mergeWith(producer, 1F / (i + 1));
-        }
-        return merged;
-    }
-
-    @Override
-    public @NotNull ScoreProducer mergeWith(@NotNull Collection<ScoreProducer> producers) {
-        ScoreProducer merged = this.copy();
-        int i = 0;
-        for (ScoreProducer producer : producers) {
-            merged.mergeWith(producer, 1F / (i + 1));
-            ++i;
-        }
-        return merged;
-    }
-
-    @Override
     public boolean isDirty() {
         return this.dirty;
     }
 
     @Override
-    protected Map<String, Map<String, Float>> getMap() {
+    public boolean canOneWayMergeWith(ScoreProducer producer) {
+        return producer instanceof LexiconObtainable;
+    }
+
+    @Override
+    public Map<String, Map<String, Float>> getLexicon() {
         return this.map;
     }
 }
