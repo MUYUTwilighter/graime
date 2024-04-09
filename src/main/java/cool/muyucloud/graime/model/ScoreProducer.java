@@ -51,7 +51,7 @@ public abstract class ScoreProducer {
      */
     public static @Nullable ScoreProducer genericLoad(@NotNull Path path) {
         for (File file : Objects.requireNonNull(path.toFile().listFiles())) {
-            if (file.isDirectory()) {
+            if (!isModelFile(file)) {
                 continue;
             }
             ScoreProducer producer = genericLoad(file);
@@ -113,8 +113,12 @@ public abstract class ScoreProducer {
         return REGISTRY.get(identifier);
     }
 
+    private static boolean isModelFile(File file) {
+        return file.isFile() && file.getName().matches("([A-za-z0-9]|\\.|_)+\\.model");
+    }
+
     private static boolean isIdentifierValid(String identifier) {
-        return identifier.matches("([a-z0-9]|\\.)+");
+        return identifier.matches("([A-za-z0-9]|\\.|_)+");
     }
 
     /**
@@ -204,7 +208,9 @@ public abstract class ScoreProducer {
      * @param producer Another producer to be merged.
      * @return Newly merged producer.
      */
-    public abstract @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer) throws ClassCastException;
+    public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer) throws ClassCastException {
+        return this.mergeWith(producer, 0.5F);
+    }
 
 
     /**
@@ -215,7 +221,14 @@ public abstract class ScoreProducer {
      * @param producers Other producers to be merged.
      * @return Newly merged producer.
      */
-    public abstract @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer... producers) throws ClassCastException;
+    public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer... producers) throws ClassCastException {
+        ScoreProducer merged = this.copy();
+        for (int i = 0; i < producers.length; ++i) {
+            ScoreProducer producer = producers[i];
+            merged.mergeWith(producer, 1F / (i + 1));
+        }
+        return merged;
+    }
 
 
     /**
@@ -226,7 +239,15 @@ public abstract class ScoreProducer {
      * @param producers Other producers to be merged.
      * @return Newly merged producer.
      */
-    public abstract @NotNull ScoreProducer mergeWith(@NotNull Collection<ScoreProducer> producers) throws ClassCastException;
+    public @NotNull ScoreProducer mergeWith(@NotNull Collection<ScoreProducer> producers) throws ClassCastException {
+        ScoreProducer merged = this.copy();
+        int i = 0;
+        for (ScoreProducer producer : producers) {
+            merged.mergeWith(producer, 1F / (i + 1));
+            ++i;
+        }
+        return merged;
+    }
 
     /**
      * Whether this producer model can merge with the producer provided,

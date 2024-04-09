@@ -3,9 +3,11 @@ package cool.muyucloud.graime.model;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.nio.file.Path;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -83,37 +85,11 @@ public class StaticDictionModel extends ScoreProducer implements LexiconObtainab
     }
 
     @Override
-    public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer) throws ClassCastException {
-        return this.mergeWith(producer, 0.5F);
-    }
-
-    @Override
-    public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer... producers) throws ClassCastException {
-        ScoreProducer merged = this.copy();
-        for (int i = 0; i < producers.length; ++i) {
-            ScoreProducer producer = producers[i];
-            merged.mergeWith(producer, 1F / (i + 1));
-        }
-        return merged;
-    }
-
-    @Override
-    public @NotNull ScoreProducer mergeWith(@NotNull Collection<ScoreProducer> producers) throws ClassCastException {
-        ScoreProducer merged = this.copy();
-        int i = 0;
-        for (ScoreProducer producer : producers) {
-            merged.mergeWith(producer, 1F / (i + 1));
-            ++i;
-        }
-        return merged;
-    }
-
-    @Override
     public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer, float weight) throws ClassCastException {
         if (this.canOneWayMergeWith(producer)) {
             return this.mergeWithLexicon((LexiconObtainable) producer, weight);
         } else {
-            return producer.mergeWith(this);
+            return producer.mergeWith(this, 1 - weight);
         }
     }
 
