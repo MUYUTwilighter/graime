@@ -1,17 +1,16 @@
 package cool.muyucloud.graime;
 
 import cool.muyucloud.graime.model.ScoreProducer;
-import cool.muyucloud.graime.model.StaticDictionModel;
+import cool.muyucloud.graime.model.TimeWeightedDictionModel;
 
 import java.io.File;
-import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
         File file = new File("models/test/default.model");
-        ScoreProducer producer = new StaticDictionModel(file);
+        ScoreProducer producer = new TimeWeightedDictionModel(file);
         producer.dump(file);
     }
 

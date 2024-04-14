@@ -17,23 +17,23 @@ import java.util.HashMap;
 import java.util.Map;
 
 @TestOnly
-public class StaticDictionModel extends ScoreProducer implements LexiconObtainable {
+public class TimeWeightedDictionModel extends ScoreProducer implements LexiconObtainable {
     private static final Gson GSON = new Gson();
 
     private @NotNull Map<String, Map<String, BiType<Float, Long>>> map;
     private boolean dirty;
 
-    public StaticDictionModel() {
+    public TimeWeightedDictionModel() {
         super();
         this.dirty = true;
     }
 
-    public StaticDictionModel(Path path) {
+    public TimeWeightedDictionModel(Path path) {
         super(path);
         this.dirty = false;
     }
 
-    public StaticDictionModel(File file) {
+    public TimeWeightedDictionModel(File file) {
         super(file);
         this.dirty = false;
     }
@@ -141,16 +141,16 @@ public class StaticDictionModel extends ScoreProducer implements LexiconObtainab
         this.map.put(pinyin, candidates);
         BiType<Float, Long> record = candidates.getOrDefault(selection, new BiType<>(0.1F, new Date().getTime()));
         Long time = record.getB();
-        Long thisTime = new Date().getTime();
-        float score = (float) (record.getA() * (1 - Math.tanh((double) (thisTime - time) / 60000)));
-        record.setA(score * 1.1F);
+        float score = this.timeFade(record.getA(), time);
+        record.setA(this.feedback(score));
+        record.setB(new Date().getTime());
         candidates.put(selection, record);
         this.dirty = true;
     }
 
     @Override
     public @NotNull ScoreProducer copy() {
-        StaticDictionModel copied = new StaticDictionModel();
+        TimeWeightedDictionModel copied = new TimeWeightedDictionModel();
         copied.dirty = true;
         for (Map.Entry<String, Map<String, BiType<Float, Long>>> entry : this.map.entrySet()) {
             String pinyin = entry.getKey();
@@ -177,8 +177,8 @@ public class StaticDictionModel extends ScoreProducer implements LexiconObtainab
         }
     }
 
-    private @NotNull StaticDictionModel mergeWithLexicon(@NotNull LexiconObtainable producer, float weight) throws ClassCastException {
-        StaticDictionModel mergedProducer = (StaticDictionModel) this.copy();
+    private @NotNull TimeWeightedDictionModel mergeWithLexicon(@NotNull LexiconObtainable producer, float weight) throws ClassCastException {
+        TimeWeightedDictionModel mergedProducer = (TimeWeightedDictionModel) this.copy();
         Map<String, Map<String, Float>> merged = mergedProducer.getLexicon();
         for (Map.Entry<String, Map<String, Float>> entry : producer.getLexicon().entrySet()) {
             String pinyin = entry.getKey();
@@ -225,5 +225,13 @@ public class StaticDictionModel extends ScoreProducer implements LexiconObtainab
             lexicon.put(pinyin, thatCandidates);
         }
         return lexicon;
+    }
+
+    private float timeFade(float score, long time) {
+        return (float) (score * (0.5F + 0.5F * (1 - Math.tanh((new Date().getTime() - time) * 86400000))));
+    }
+
+    private float feedback(float score) {
+        return (float) (0.5F + 0.5F * Math.sin(Math.PI * score));
     }
 }

@@ -17,7 +17,7 @@ public abstract class ScoreProducer {
     private static final Map<String, Class<? extends ScoreProducer>> REGISTRY = new HashMap<>();
 
     static {
-        register("default", StaticDictionModel.class);
+        register("default", TimeWeightedDictionModel.class);
     }
 
     /**
