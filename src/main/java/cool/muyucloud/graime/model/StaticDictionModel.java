@@ -1,20 +1,42 @@
 package cool.muyucloud.graime.model;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import cool.muyucloud.graime.util.BiType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.InputStream;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystemException;
 import java.nio.file.Path;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
 @TestOnly
 public class StaticDictionModel extends ScoreProducer implements LexiconObtainable {
-    private final Map<String, Map<String, Float>> map = new HashMap<>();
-    private boolean dirty = false;
+    private static final Gson GSON = new Gson();
+
+    private @NotNull Map<String, Map<String, BiType<Float, Long>>> map;
+    private boolean dirty;
+
+    public StaticDictionModel() {
+        super();
+        this.dirty = true;
+    }
+
+    public StaticDictionModel(Path path) {
+        super(path);
+        this.dirty = false;
+    }
+
+    public StaticDictionModel(File file) {
+        super(file);
+        this.dirty = false;
+    }
 
     @Override
     public @NotNull String getIdentifier() {
@@ -23,27 +45,73 @@ public class StaticDictionModel extends ScoreProducer implements LexiconObtainab
 
     @Override
     protected void create() {
-        this.dirty = true;
+        this.map = new HashMap<>();
     }
 
     @Override
-    public void load(@NotNull Path path) {
-        try (InputStream stream = new FileInputStream(path.toFile())) {
+    public void load(@NotNull File file) {
+        try (Reader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
+            this.map = new HashMap<>();
+            JsonObject map = GSON.fromJson(reader, JsonObject.class);
+            for (Map.Entry<String, JsonElement> entry : map.entrySet()) {
+                String pinyin = entry.getKey();
+                JsonObject candidatesRaw = entry.getValue().getAsJsonObject();
+                Map<String, BiType<Float, Long>> candidates = new HashMap<>();
+                for (Map.Entry<String, JsonElement> record : candidatesRaw.entrySet()) {
+                    String candidate = record.getKey();
+                    JsonArray biTypeRaw = record.getValue().getAsJsonArray();
+                    BiType<Float, Long> biType = new BiType<>(biTypeRaw.get(0).getAsFloat(), biTypeRaw.get(1).getAsLong());
+                    candidates.put(candidate, biType);
+                }
+                this.map.put(pinyin, candidates);
+            }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
         /* Read file */
-        this.dirty = true;
+        this.dirty = false;
     }
 
     @Override
     public void dump(@NotNull Path path) {
-        File file = path.resolve(this.getIdentifier() + ScoreProducer.POST_FIX).toFile();
+        this.dump(path.resolve(this.getIdentifier() + POST_FIX).toFile());
+    }
+
+    @Override
+    public void dump(@NotNull File file) {
         try {
             if (!file.exists()) {
-                file.createNewFile();
+                if (!file.createNewFile()) {
+                    throw new FileSystemException("Failed to create file.");
+                }
             }
-            new FileOutputStream(path.resolve(this.getIdentifier() + ScoreProducer.POST_FIX).toFile()).close();
+            StringBuilder builder = new StringBuilder("{");
+            for (Map.Entry<String, Map<String, BiType<Float, Long>>> entry : this.map.entrySet()) {
+                String pinyin = entry.getKey();
+                Map<String, BiType<Float, Long>> candidates = entry.getValue();
+                builder.append('"').append(pinyin).append("\":{");
+                for (Map.Entry<String, BiType<Float, Long>> record : candidates.entrySet()) {
+                    String candidate = record.getKey();
+                    Float score = record.getValue().getA();
+                    Long time = record.getValue().getB();
+                    builder.append('"').append(candidate)
+                        .append("\":[")
+                        .append(score).append(',').append(time)
+                        .append("],");
+                }
+                // remove redundant ','
+                int len = builder.length();
+                builder.deleteCharAt(len - 1);
+                builder.append("},");
+            }
+            // remove redundant ','
+            int len = builder.length();
+            builder.deleteCharAt(len - 1);
+            builder.append('}');
+            // start dump
+            OutputStream stream = new FileOutputStream(file);
+            stream.write(builder.toString().getBytes(StandardCharsets.UTF_8));
+            stream.close();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -51,33 +119,47 @@ public class StaticDictionModel extends ScoreProducer implements LexiconObtainab
 
     @Override
     public @NotNull Map<String, Float> getScores(@NotNull String pinyin) {
-        Map<String, Float> candidates = this.map.getOrDefault(pinyin, new HashMap<>());
+        Map<String, BiType<Float, Long>> candidates = this.map.getOrDefault(pinyin, new HashMap<>());
         this.map.put(pinyin, candidates);
-        return candidates;
+        Map<String, Float> scores = new HashMap<>();
+        for (Map.Entry<String, BiType<Float, Long>> entry : candidates.entrySet()) {
+            String candidate = entry.getKey();
+            Long time = entry.getValue().getB();
+            Long thisTime = new Date().getTime();
+            Float score = (float) (entry.getValue().getA() * (1 - Math.tanh((double) (thisTime - time) / 60000)));
+            candidates.put(candidate, new BiType<>(score, thisTime));
+            scores.put(candidate, score);
+        }
+        this.dirty = true;
+        return scores;
     }
 
     @Override
     public void update(@NotNull String pinyin, @NotNull String selection) {
         this.dirty = true;
-        Map<String, Float> candidates = this.map.getOrDefault(pinyin, new HashMap<>());
+        Map<String, BiType<Float, Long>> candidates = this.map.getOrDefault(pinyin, new HashMap<>());
         this.map.put(pinyin, candidates);
-        float score = candidates.getOrDefault(selection, 0.1F);
-        score *= 1.1F;
-        candidates.put(selection, score);
+        BiType<Float, Long> record = candidates.getOrDefault(selection, new BiType<>(0.1F, new Date().getTime()));
+        Long time = record.getB();
+        Long thisTime = new Date().getTime();
+        float score = (float) (record.getA() * (1 - Math.tanh((double) (thisTime - time) / 60000)));
+        record.setA(score * 1.1F);
+        candidates.put(selection, record);
+        this.dirty = true;
     }
 
     @Override
     public @NotNull ScoreProducer copy() {
         StaticDictionModel copied = new StaticDictionModel();
         copied.dirty = true;
-        for (Map.Entry<String, Map<String, Float>> entry : this.map.entrySet()) {
+        for (Map.Entry<String, Map<String, BiType<Float, Long>>> entry : this.map.entrySet()) {
             String pinyin = entry.getKey();
-            Map<String, Float> candidates = entry.getValue();
-            Map<String, Float> thatCandidates = new HashMap<>();
-            for (Map.Entry<String, Float> stringFloatEntry : candidates.entrySet()) {
-                String candidate = stringFloatEntry.getKey();
-                float score = stringFloatEntry.getValue();
-                thatCandidates.put(candidate, score);
+            Map<String, BiType<Float, Long>> candidates = entry.getValue();
+            Map<String, BiType<Float, Long>> thatCandidates = new HashMap<>();
+            for (Map.Entry<String, BiType<Float, Long>> record : candidates.entrySet()) {
+                String candidate = record.getKey();
+                float score = record.getValue().getA();
+                thatCandidates.put(candidate, new BiType<>(score, new Date().getTime()));
             }
             copied.map.put(pinyin, thatCandidates);
         }
@@ -88,8 +170,10 @@ public class StaticDictionModel extends ScoreProducer implements LexiconObtainab
     public @NotNull ScoreProducer mergeWith(@NotNull ScoreProducer producer, float weight) throws ClassCastException {
         if (this.canOneWayMergeWith(producer)) {
             return this.mergeWithLexicon((LexiconObtainable) producer, weight);
-        } else {
+        } else if (producer.canOneWayMergeWith(this)) {
             return producer.mergeWith(this, 1 - weight);
+        } else {
+            throw new ClassCastException("Merge option cannot be applied between StaticDictionModel and " + producer);
         }
     }
 
@@ -128,6 +212,18 @@ public class StaticDictionModel extends ScoreProducer implements LexiconObtainab
 
     @Override
     public Map<String, Map<String, Float>> getLexicon() {
-        return this.map;
+        Map<String, Map<String, Float>> lexicon = new HashMap<>();
+        for (Map.Entry<String, Map<String, BiType<Float, Long>>> entry : this.map.entrySet()) {
+            String pinyin = entry.getKey();
+            Map<String, BiType<Float, Long>> candidates = entry.getValue();
+            Map<String, Float> thatCandidates = new HashMap<>();
+            for (Map.Entry<String, BiType<Float, Long>> record : candidates.entrySet()) {
+                String candidate = record.getKey();
+                float score = record.getValue().getA();
+                thatCandidates.put(candidate, score);
+            }
+            lexicon.put(pinyin, thatCandidates);
+        }
+        return lexicon;
     }
 }

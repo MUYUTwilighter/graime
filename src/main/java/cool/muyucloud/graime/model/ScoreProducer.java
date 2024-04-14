@@ -76,7 +76,7 @@ public abstract class ScoreProducer {
             return null;
         }
         try {
-            Constructor<? extends ScoreProducer> constructor = cl.getConstructor(File.class);
+            Constructor<? extends ScoreProducer> constructor = cl.getDeclaredConstructor(File.class);
             return constructor.newInstance(file);
         } catch (Exception e) {
             e.printStackTrace();
@@ -129,13 +129,23 @@ public abstract class ScoreProducer {
     }
 
     /**
-     * Load the producer model from where the model file locates.<br/>
-     * File name will be autofill.
+     * Load the producer model from file system.<br/>
+     * Specific filename will be autofill.
      *
-     * @param path Path of the model file.
+     * @param path File instance of the model file.
      */
     public ScoreProducer(Path path) {
-        this.load(path);
+        this.load(path.resolve(this.getIdentifier() + POST_FIX).toFile());
+    }
+
+    /**
+     * Load the producer model from file system.<br/>
+     * Specific filename should be included.
+     *
+     * @param file File instance of the model file.
+     */
+    public ScoreProducer(File file) {
+        this.load(file);
     }
 
     /**
@@ -151,19 +161,28 @@ public abstract class ScoreProducer {
     protected abstract void create();
 
     /**
-     * Load the producer model from where the model file locates.<br/>
-     * File name will be autofill.
+     * Load the producer model from file system.<br/>
+     * Specific filename should be included.
      *
-     * @param path Path of the model file.
+     * @param file File instance of the model file.
      */
-    public abstract void load(@NotNull Path path);
+    public abstract void load(@NotNull File file);
 
     /**
-     * Save and dump the producer model into target path.
+     * Save and dump the producer model into target path.<br/>
+     * Filename will be autofill.
      *
      * @param path Target path.
      */
     public abstract void dump(@NotNull Path path);
+
+    /**
+     * Save and dump the producer model into target location.<br/>
+     * Filename will be included.
+     *
+     * @param file Target path.
+     */
+    public abstract void dump(@NotNull File file);
 
     /**
      * Query a sequence of possible candidate words of the pinyin input,

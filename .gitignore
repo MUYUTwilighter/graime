@@ -40,5 +40,7 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Custom ###
 /models/
 /.idea/

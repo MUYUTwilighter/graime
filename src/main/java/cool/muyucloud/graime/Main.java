@@ -1,11 +1,21 @@
 package cool.muyucloud.graime;
 
+import cool.muyucloud.graime.model.ScoreProducer;
+import cool.muyucloud.graime.model.StaticDictionModel;
+
+import java.io.File;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
+        File file = new File("models/test/default.model");
+        ScoreProducer producer = new StaticDictionModel(file);
+        producer.dump(file);
+    }
+
+    public static void testSceneTree() {
         Map<String, String> train = new HashMap<>();
         train.put("abc", "test");
         train.put("pinyin", "candidate");
