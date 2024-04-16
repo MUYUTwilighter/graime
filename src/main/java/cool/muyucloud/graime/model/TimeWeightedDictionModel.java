@@ -4,9 +4,9 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import cool.muyucloud.graime.annotations.ImplementedProducer;
 import cool.muyucloud.graime.util.BiType;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.TestOnly;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -16,11 +16,11 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-@TestOnly
+@ImplementedProducer("default")
 public class TimeWeightedDictionModel extends ScoreProducer implements LexiconObtainable {
     private static final Gson GSON = new Gson();
 
-    private @NotNull Map<String, Map<String, BiType<Float, Long>>> map;
+    private Map<String, Map<String, BiType<Float, Long>>> map;
     private boolean dirty;
 
     public TimeWeightedDictionModel() {
@@ -40,7 +40,7 @@ public class TimeWeightedDictionModel extends ScoreProducer implements LexiconOb
 
     @Override
     public @NotNull String getIdentifier() {
-        return "test";
+        return "default";
     }
 
     @Override
@@ -109,9 +109,9 @@ public class TimeWeightedDictionModel extends ScoreProducer implements LexiconOb
             builder.deleteCharAt(len - 1);
             builder.append('}');
             // start dump
-            OutputStream stream = new FileOutputStream(file);
-            stream.write(builder.toString().getBytes(StandardCharsets.UTF_8));
-            stream.close();
+            Writer writer = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
+            writer.write(builder.toString());
+            writer.close();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -124,10 +124,12 @@ public class TimeWeightedDictionModel extends ScoreProducer implements LexiconOb
         Map<String, Float> scores = new HashMap<>();
         for (Map.Entry<String, BiType<Float, Long>> entry : candidates.entrySet()) {
             String candidate = entry.getKey();
-            Long time = entry.getValue().getB();
+            BiType<Float, Long> record = entry.getValue();
+            Long time = record.getB();
             Long thisTime = new Date().getTime();
-            Float score = (float) (entry.getValue().getA() * (1 - Math.tanh((double) (thisTime - time) / 60000)));
-            candidates.put(candidate, new BiType<>(score, thisTime));
+            Float score = this.timeFade(record.getA(), time);
+            record.setA(score);
+            record.setB(thisTime);
             scores.put(candidate, score);
         }
         this.dirty = true;
@@ -190,7 +192,7 @@ public class TimeWeightedDictionModel extends ScoreProducer implements LexiconOb
                 Float score = candidatesEntry.getValue();
                 Float mergedScore = mergedCandidates.getOrDefault(candidate, null);
                 if (mergedScore == null) {
-                    mergedScore = score;
+                    mergedScore = score * weight;
                 } else {
                     mergedScore = score * weight + mergedScore * (1 - weight);
                 }
@@ -228,7 +230,7 @@ public class TimeWeightedDictionModel extends ScoreProducer implements LexiconOb
     }
 
     private float timeFade(float score, long time) {
-        return (float) (score * (0.5F + 0.5F * (1 - Math.tanh((new Date().getTime() - time) * 86400000))));
+        return (float) (score * (0.5F + 0.5F * (1 - Math.tanh((double) (new Date().getTime() - time) / 86400000))));
     }
 
     private float feedback(float score) {

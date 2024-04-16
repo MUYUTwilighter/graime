@@ -44,3 +44,5 @@ bin/
 ### Custom ###
 /models/
 /.idea/
+/dl/resources/large_corpus/
+/dl/venv/

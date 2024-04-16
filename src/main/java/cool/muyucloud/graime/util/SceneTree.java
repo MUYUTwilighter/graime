@@ -39,6 +39,10 @@ public class SceneTree {
         return this.root.getPath();
     }
 
+    public @NotNull Path getCurrentPath() {
+        return this.current.getPath();
+    }
+
     /**
      * Step into another scene, create if the scene node does not exist.<br/>
      * Involves node switching record.
@@ -82,13 +86,27 @@ public class SceneTree {
             this.current.createProducer(this.root.getProducer());
             current = this.current.getProducer();
         }
+        Map<String, Float> currentScores = current.getScores(pinyin);
         if (this.old == null) {
-            return current.getScores(pinyin);
+            return currentScores;
         }
-        ScoreProducer old = this.old.getProducer();
+        Map<String, Float> oldScores = old.getProducer().getScores(pinyin);
         float weight = this.calcWeight();
-        ScoreProducer producer = current.mergeWith(old, weight);
-        return producer.getScores(pinyin);
+        Map<String, Float> integrated = new HashMap<>();
+        for (Map.Entry<String, Float> entry : currentScores.entrySet()) {
+            String candidate = entry.getKey();
+            Float score = entry.getValue() * (1 - weight);
+            integrated.put(candidate, score);
+        }
+        for (Map.Entry<String, Float> entry : oldScores.entrySet()) {
+            String candidate = entry.getKey();
+            Float score = entry.getValue() * weight;
+            if (integrated.containsKey(candidate)) {
+                score += integrated.get(candidate);
+            }
+            integrated.put(candidate, score);
+        }
+        return integrated;
     }
 
     /**
@@ -101,13 +119,15 @@ public class SceneTree {
         ScoreProducer current = this.current.getProducer();
         ScoreProducer root = this.root.getProducer();
         if (current == null) {
-            throw new IllegalStateException("Current scene cannot be input.");
+            this.current.createProducer(root);
         }
         if (root == null) {
             throw new InternalException("Model of root node is missing, might caused by an internal structure error.");
         }
         this.current.getProducer().update(pinyin, selection);
-        this.root.getProducer().update(pinyin, selection);
+        if (this.current != this.root) {
+            this.root.getProducer().update(pinyin, selection);
+        }
     }
 
     /**
@@ -140,7 +160,7 @@ public class SceneTree {
 
     private void traverseDelete(Path path) {
         Node node = this.nodes.get(path);
-        if (node.isRoot()) {
+        if (!node.isRoot()) {
             node.getParent().getChildren().remove(node);
             this.nodes.remove(path);
         }
@@ -193,7 +213,7 @@ public class SceneTree {
 
     private static class Node {
         private final Path path;
-        private @Nullable ScoreProducer producer = null;
+        private ScoreProducer producer = null;
         private final Set<Node> children = new HashSet<>();
         private @Nullable Node parent = null;
         private boolean dirty = false;
@@ -244,7 +264,7 @@ public class SceneTree {
             return producer != null;
         }
 
-        protected @Nullable ScoreProducer getProducer() {
+        protected ScoreProducer getProducer() {
             return this.producer;
         }
 
@@ -291,7 +311,7 @@ public class SceneTree {
         }
 
         public boolean isRoot() {
-            return this.parent == null;
+            return this.getParent() == null;
         }
 
         /**

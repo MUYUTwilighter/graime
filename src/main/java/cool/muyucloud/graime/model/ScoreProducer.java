@@ -1,23 +1,30 @@
 package cool.muyucloud.graime.model;
 
 import com.sun.jdi.request.DuplicateRequestException;
+import cool.muyucloud.graime.annotations.ImplementedProducer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
 import java.nio.file.Path;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 public abstract class ScoreProducer {
     public static final String POST_FIX = ".model";
     private static final Map<String, Class<? extends ScoreProducer>> REGISTRY = new HashMap<>();
 
     static {
-        register("default", TimeWeightedDictionModel.class);
+        ServiceLoader.load(ScoreProducer.class).stream()
+            .map(ServiceLoader.Provider::type)
+            .filter(clazz -> clazz.isAnnotationPresent(ImplementedProducer.class) &&
+                ScoreProducer.class.isAssignableFrom(clazz) &&
+                !clazz.isInterface() && !Modifier.isAbstract(clazz.getModifiers()))
+            .forEach(clazz -> {
+                ImplementedProducer anno = clazz.getAnnotation(ImplementedProducer.class);
+                register(anno.value(), clazz);
+            });
     }
 
     /**
@@ -79,8 +86,7 @@ public abstract class ScoreProducer {
             Constructor<? extends ScoreProducer> constructor = cl.getDeclaredConstructor(File.class);
             return constructor.newInstance(file);
         } catch (Exception e) {
-            e.printStackTrace();
-            return null;
+            throw new RuntimeException(e);
         }
     }
 
