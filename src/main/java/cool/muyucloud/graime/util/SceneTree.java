@@ -15,7 +15,7 @@ public class SceneTree {
     private final @NotNull Map<Path, Node> nodes = new HashMap<>();
     private @NotNull Node current;
     private @Nullable Node old = null;
-    private long lastStep = new Date().getTime();
+    private long lastStep = Clock.getTime();
 
     /**
      * Load SceneTree from local files
@@ -35,6 +35,20 @@ public class SceneTree {
         }
     }
 
+    private Node traverseLoad(@NotNull Path path) {
+        Path absolute = this.parent.resolve(path);
+        Node node = Node.load(path, this.parent);
+        for (File subFile : Objects.requireNonNull(absolute.toFile().listFiles())) {
+            if (subFile.isDirectory()) {
+                Path subFileName = subFile.toPath().getFileName();
+                Node subNode = traverseLoad(path.resolve(subFileName));
+                subNode.setParent(node);
+            }
+        }
+        this.nodes.put(path, node);
+        return node;
+    }
+
     public @NotNull Path getName() {
         return this.root.getPath();
     }
@@ -52,7 +66,7 @@ public class SceneTree {
     public void stepInto(Path path) {
         if (this.current.hasProducer()) {
             this.old = this.current;
-            this.lastStep = new Date().getTime();
+            this.lastStep = Clock.getTime();
         }
         this.current = this.nodes.get(path);
         if (this.current == null) {
@@ -82,10 +96,6 @@ public class SceneTree {
             this.current.createProducer(this.root.getProducer());
         }
         ScoreProducer current = this.current.getProducer();
-        if (current == null) {
-            this.current.createProducer(this.root.getProducer());
-            current = this.current.getProducer();
-        }
         Map<String, Float> currentScores = current.getScores(pinyin);
         if (this.old == null) {
             return currentScores;
@@ -188,27 +198,13 @@ public class SceneTree {
     }
 
     private float calcWeight() {
-        long duration = (new Date().getTime() - this.lastStep) / 1000;
+        long duration = (Clock.getTime() - this.lastStep) / 1000;
         return (float) 1 / (duration + 2);
     }
 
     private Path calcRelative(Path program, Path box) {
         program = Path.of(String.valueOf(program.hashCode()));
         return this.getName().resolve(program).resolve(box);
-    }
-
-    private Node traverseLoad(@NotNull Path path) {
-        Path absolute = this.parent.resolve(path);
-        Node node = Node.load(path, this.parent);
-        for (File subFile : Objects.requireNonNull(absolute.toFile().listFiles())) {
-            if (subFile.isDirectory()) {
-                Path subFileName = subFile.toPath().getFileName();
-                Node subNode = traverseLoad(path.resolve(subFileName));
-                subNode.setParent(node);
-            }
-        }
-        this.nodes.put(path, node);
-        return node;
     }
 
     private static class Node {
@@ -280,7 +276,7 @@ public class SceneTree {
          *
          * @param root Root node of the SceneTree.
          */
-        public void createProducer(ScoreProducer root) {
+        public void createProducer(@NotNull ScoreProducer root) {
             if (this.isRoot()) {
                 this.setProducer(ScoreProducer.create("default"));
                 return;

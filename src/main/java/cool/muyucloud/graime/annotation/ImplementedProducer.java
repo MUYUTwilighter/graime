@@ -1,4 +1,4 @@
-package cool.muyucloud.graime.annotations;
+package cool.muyucloud.graime.annotation;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

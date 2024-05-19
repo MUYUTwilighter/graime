@@ -4,15 +4,15 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import cool.muyucloud.graime.annotations.ImplementedProducer;
+import cool.muyucloud.graime.annotation.ImplementedProducer;
 import cool.muyucloud.graime.util.BiType;
+import cool.muyucloud.graime.util.Clock;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystemException;
 import java.nio.file.Path;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -126,7 +126,7 @@ public class TimeWeightedDictionModel extends ScoreProducer implements LexiconOb
             String candidate = entry.getKey();
             BiType<Float, Long> record = entry.getValue();
             Long time = record.getB();
-            Long thisTime = new Date().getTime();
+            Long thisTime = Clock.getTime();
             Float score = this.timeFade(record.getA(), time);
             record.setA(score);
             record.setB(thisTime);
@@ -141,11 +141,11 @@ public class TimeWeightedDictionModel extends ScoreProducer implements LexiconOb
         this.dirty = true;
         Map<String, BiType<Float, Long>> candidates = this.map.getOrDefault(pinyin, new HashMap<>());
         this.map.put(pinyin, candidates);
-        BiType<Float, Long> record = candidates.getOrDefault(selection, new BiType<>(0.1F, new Date().getTime()));
+        BiType<Float, Long> record = candidates.getOrDefault(selection, new BiType<>(0.7F, Clock.getTime()));
         Long time = record.getB();
         float score = this.timeFade(record.getA(), time);
         record.setA(this.feedback(score));
-        record.setB(new Date().getTime());
+        record.setB(Clock.getTime());
         candidates.put(selection, record);
         this.dirty = true;
     }
@@ -161,7 +161,7 @@ public class TimeWeightedDictionModel extends ScoreProducer implements LexiconOb
             for (Map.Entry<String, BiType<Float, Long>> record : candidates.entrySet()) {
                 String candidate = record.getKey();
                 float score = record.getValue().getA();
-                thatCandidates.put(candidate, new BiType<>(score, new Date().getTime()));
+                thatCandidates.put(candidate, new BiType<>(score, Clock.getTime()));
             }
             copied.map.put(pinyin, thatCandidates);
         }
@@ -181,23 +181,21 @@ public class TimeWeightedDictionModel extends ScoreProducer implements LexiconOb
 
     private @NotNull TimeWeightedDictionModel mergeWithLexicon(@NotNull LexiconObtainable producer, float weight) throws ClassCastException {
         TimeWeightedDictionModel mergedProducer = (TimeWeightedDictionModel) this.copy();
-        Map<String, Map<String, Float>> merged = mergedProducer.getLexicon();
+        Map<String, Map<String, BiType<Float, Long>>> merged = mergedProducer.map;
         for (Map.Entry<String, Map<String, Float>> entry : producer.getLexicon().entrySet()) {
             String pinyin = entry.getKey();
             Map<String, Float> candidates = entry.getValue();
-            Map<String, Float> mergedCandidates = merged.getOrDefault(pinyin, new HashMap<>());
-            merged.put(pinyin, mergedCandidates);
+            Map<String, BiType<Float, Long>> mergedCandidates = merged.getOrDefault(pinyin, new HashMap<>());
             for (Map.Entry<String, Float> candidatesEntry : candidates.entrySet()) {
                 String candidate = candidatesEntry.getKey();
                 Float score = candidatesEntry.getValue();
-                Float mergedScore = mergedCandidates.getOrDefault(candidate, null);
-                if (mergedScore == null) {
-                    mergedScore = score * weight;
-                } else {
-                    mergedScore = score * weight + mergedScore * (1 - weight);
-                }
-                mergedCandidates.put(candidate, mergedScore);
+                BiType<Float, Long> mergedRecord = mergedCandidates.getOrDefault(candidate, new BiType<>(0F, Clock.getTime()));
+                Float mergedScore = mergedRecord.getA();
+                mergedScore = score * weight + mergedScore * (1 - weight);
+                mergedRecord.setA(mergedScore);
+                mergedCandidates.put(candidate, mergedRecord);
             }
+            merged.put(pinyin, mergedCandidates);
         }
         return mergedProducer;
     }
@@ -230,10 +228,10 @@ public class TimeWeightedDictionModel extends ScoreProducer implements LexiconOb
     }
 
     private float timeFade(float score, long time) {
-        return (float) (score * (0.5F + 0.5F * (1 - Math.tanh((double) (new Date().getTime() - time) / 86400000))));
+        return (float) (score * Math.pow(2, - (double) (Clock.getTime() - time) / 86400000));
     }
 
     private float feedback(float score) {
-        return (float) (0.5F + 0.5F * Math.sin(Math.PI * score));
+        return (float) Math.sin(Math.PI * score / 2);
     }
 }

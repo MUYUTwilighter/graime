@@ -1,9 +1,14 @@
 package cool.muyucloud.graime.model;
 
 import com.sun.jdi.request.DuplicateRequestException;
-import cool.muyucloud.graime.annotations.ImplementedProducer;
+import cool.muyucloud.graime.annotation.ImplementedProducer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.reflections.Reflections;
+import org.reflections.scanners.SubTypesScanner;
+import org.reflections.scanners.TypeAnnotationsScanner;
+import org.reflections.util.ClasspathHelper;
+import org.reflections.util.ConfigurationBuilder;
 
 import java.io.File;
 import java.lang.reflect.Constructor;
@@ -16,16 +21,34 @@ public abstract class ScoreProducer {
     private static final Map<String, Class<? extends ScoreProducer>> REGISTRY = new HashMap<>();
 
     static {
-        ServiceLoader.load(ScoreProducer.class).stream()
-            .map(ServiceLoader.Provider::type)
-            .filter(clazz -> clazz.isAnnotationPresent(ImplementedProducer.class) &&
-                ScoreProducer.class.isAssignableFrom(clazz) &&
-                !clazz.isInterface() && !Modifier.isAbstract(clazz.getModifiers()))
-            .forEach(clazz -> {
-                ImplementedProducer anno = clazz.getAnnotation(ImplementedProducer.class);
-                register(anno.value(), clazz);
-            });
+        Reflections reflections = new Reflections(
+            new ConfigurationBuilder().addScanners(
+                    new SubTypesScanner(false),
+                    new TypeAnnotationsScanner()
+                )
+                .addUrls(ClasspathHelper.forJavaClassPath())
+                .addUrls(ClasspathHelper.forClassLoader())
+        );
+        Set<Class<? extends ScoreProducer>> classes = reflections.getSubTypesOf(ScoreProducer.class);
+        for (Class<? extends ScoreProducer> cl : classes) {
+            ImplementedProducer anno = cl.getAnnotation(ImplementedProducer.class);
+            if (anno != null) {
+                register(anno.value(), cl);
+            }
+        }
     }
+
+//    static {
+//        ServiceLoader.load(ScoreProducer.class).stream()
+//            .map(ServiceLoader.Provider::type)
+//            .filter(clazz -> clazz.isAnnotationPresent(ImplementedProducer.class) &&
+//                ScoreProducer.class.isAssignableFrom(clazz) &&
+//                !clazz.isInterface() && !Modifier.isAbstract(clazz.getModifiers()))
+//            .forEach(clazz -> {
+//                ImplementedProducer anno = clazz.getAnnotation(ImplementedProducer.class);
+//                register(anno.value(), clazz);
+//            });
+//    }
 
     /**
      * Register a fully implemented producer model class
@@ -38,13 +61,13 @@ public abstract class ScoreProducer {
      */
     public static void register(@NotNull String identifier, @NotNull Class<? extends ScoreProducer> cl) {
         if (REGISTRY.containsKey(identifier)) {
-            throw new DuplicateRequestException("Duplicated identifier");
+            throw new DuplicateRequestException("Duplicated identifier %s".formatted(identifier));
         }
         if (REGISTRY.containsValue(cl)) {
-            throw new DuplicateRequestException("Duplicated producer class");
+            throw new DuplicateRequestException("Duplicated producer class %s".formatted(cl.getName()));
         }
         if (!isIdentifierValid(identifier)) {
-            throw new IllegalArgumentException("Not a valid identifier");
+            throw new IllegalArgumentException("%s is not a valid identifier".formatted(identifier));
         }
         REGISTRY.put(identifier, cl);
     }
@@ -292,7 +315,9 @@ public abstract class ScoreProducer {
      * @param producer Another producer to get merged.
      * @return {@code true} if this producer and the producer provided can get merged.
      */
-    protected abstract boolean canOneWayMergeWith(ScoreProducer producer);
+    protected boolean canOneWayMergeWith(ScoreProducer producer) {
+        return false;
+    }
 
     /**
      * Whether the instance has been changed and should be dumped.

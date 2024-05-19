@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import cool.muyucloud.graime.util.BiType;
+import cool.muyucloud.graime.util.Clock;
 import cool.muyucloud.graime.util.SceneTree;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
@@ -54,6 +55,7 @@ public class Test {
         for (String i : paths) {
             if (i.equals("..")) {
                 path = path.getParent();
+                this.sceneTree.stepInto(path);
             } else {
                 path = path.resolve(i);
                 sceneTree.stepInto(path);
@@ -63,6 +65,7 @@ public class Test {
 
     public float input(int count) {
         float score = 0F;
+        int success = 0;
         for (int i = this.index; i < this.index + count && i < CORPUS.size(); ++i) {
             BiType<String, String> record = CORPUS.get(i);
             Map<String, Float> scores = sceneTree.getScores(record.getB());
@@ -71,22 +74,25 @@ public class Test {
             int p = 0;
             for (Map.Entry<String, Float> entry : sorted) {
                 boolean result = entry.getKey().equals(record.getA());
-                if (result || p >= 10) {
+                if (result) {
+                    score += Math.max(1F / (p + 1), 0);
+                    success++;
                     break;
                 }
                 p++;
             }
-            score += Math.max((10F / (p + 1)) / 10, 0);
             sceneTree.updateProducer(record.getB(), record.getA());
+            Clock.forward(Math.abs(random.nextInt() % 10000));
         }
         this.index += count;
-        return score / count;
+        return score / success;
     }
 
     public void update(int count) {
         for (int i = this.index; i < this.index + count && i < CORPUS.size(); ++i) {
             BiType<String, String> record = CORPUS.get(i);
             this.sceneTree.updateProducer(record.getB(), record.getA());
+            Clock.forward(Math.abs(random.nextInt() % 10000));
         }
         this.index += count;
     }

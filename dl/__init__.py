@@ -2,12 +2,11 @@ import platform
 
 import numpy as np
 import torch as torch
-from tqdm import tqdm
 from numpy import ndarray
-from torch.nn import Conv1d, MaxPool1d, BatchNorm1d, ReLU, Flatten, Linear, MSELoss, Sigmoid
-from torch.nn.modules.loss import _Loss, KLDivLoss, L1Loss, MarginRankingLoss
+from torch.nn import Conv1d, MaxPool1d, BatchNorm1d, ReLU, Flatten, Linear, Sigmoid
+from torch.nn.modules.loss import _Loss, L1Loss, MarginRankingLoss
 from torch.optim import Optimizer, Adam
-from torch.utils.data import DataLoader, TensorDataset
+from tqdm import tqdm
 
 TOTAL_WORDS: int = 30000
 TRAIN_WORDS: int = int(0.7 * TOTAL_WORDS)
